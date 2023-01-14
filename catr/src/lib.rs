@@ -55,33 +55,32 @@ fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
     }
 }
 
-fn print_file(file: Box<dyn BufRead>, config: &Config) {
-    let mut line_num = 0;
+fn print_file(file: Box<dyn BufRead>, config: &Config) -> MyResult<()> {
     let mut blank_count = 0;
-    for line_r in file.lines() {
-        let line = line_r.unwrap();
-        line_num += 1;
+    for (line_num, line) in file.lines().enumerate() {
+        let line = line?;
         if line.is_empty() {
             blank_count += 1;
         }
 
         let prefix = if config.number_lines {
-            format!("{:>6}\t", line_num)
+            format!("{:>6}\t", line_num + 1)
         } else if config.number_nonblank_lines && !line.is_empty() {
-            format!("{:>6}\t", line_num - blank_count)
+            format!("{:>6}\t", line_num + 1 - blank_count)
         } else {
             String::from("")
         };
 
         println!("{}{}", prefix, line);
     }
+    Ok(())
 }
 
 pub fn run(config: Config) -> MyResult<()> {
     for filename in &config.files {
         match open(&filename) {
-            Err(err) => eprintln!("Failed to open {}: {}", filename, err),
-            Ok(file) => print_file(file, &config),
+            Err(err) => eprintln!("{}: {}", filename, err),
+            Ok(file) => print_file(file, &config)?,
         }
     }
     Ok(())
