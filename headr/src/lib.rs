@@ -1,8 +1,7 @@
 use clap::{App, Arg};
-use std::cmp::min;
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -99,33 +98,22 @@ fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
     }
 }
 
-fn print_lines(mut file: Box<dyn BufRead>, mut num_lines: usize) {
+fn print_lines(mut file: Box<dyn BufRead>, num_lines: usize) -> MyResult<()> {
     let mut buf = String::new();
-    while num_lines > 0 && file.read_line(&mut buf).unwrap() != 0 {
-        print!("{}", buf);
-        buf.clear();
-        num_lines -= 1;
-    }
-    io::stdout().flush().unwrap();
-}
-
-fn print_bytes(mut file: Box<dyn BufRead>, mut num_bytes: usize) {
-    while num_bytes > 0 {
-        let bytes = file.fill_buf().unwrap();
-        if bytes.len() == 0 {
-            // no data left in the file
+    for _ in 0..num_lines {
+        if file.read_line(&mut buf)? == 0 {
             break;
         }
-        print!(
-            "{}",
-            String::from_utf8_lossy(&bytes[..min(bytes.len(), num_bytes)])
-        );
-
-        let length = bytes.len();
-        file.consume(length);
-        num_bytes -= min(length, num_bytes);
+        print!("{}", buf);
+        buf.clear();
     }
-    io::stdout().flush().unwrap();
+    Ok(())
+}
+
+fn print_bytes(file: Box<dyn BufRead>, num_bytes: usize) -> MyResult<()> {
+    let bytes: Result<Vec<_>, _> = file.bytes().take(num_bytes).collect();
+    print!("{}", String::from_utf8_lossy(&bytes?));
+    Ok(())
 }
 
 pub fn run(config: Config) -> MyResult<()> {
@@ -144,9 +132,9 @@ pub fn run(config: Config) -> MyResult<()> {
                     );
                 }
                 if let Some(num_bytes) = config.bytes {
-                    print_bytes(file, num_bytes);
+                    print_bytes(file, num_bytes)?;
                 } else {
-                    print_lines(file, config.lines);
+                    print_lines(file, config.lines)?;
                 }
                 file_succeeded = true;
             }
