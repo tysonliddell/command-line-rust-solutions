@@ -101,14 +101,16 @@ fn count(mut file: impl BufRead) -> MyResult<FileInfo> {
     let mut num_chars = 0;
 
     let mut buf = String::new();
-    num_bytes += file.read_line(&mut buf)?;
-    while buf.len() > 0 {
-        num_lines += 1;
-        num_words += buf.split_ascii_whitespace().collect::<Vec<_>>().len();
-        num_chars += buf.chars().collect::<Vec<_>>().len();
-
-        buf.clear();
+    loop {
         num_bytes += file.read_line(&mut buf)?;
+        if buf.len() == 0 {
+            break
+        }
+
+        num_lines += 1;
+        num_words += buf.split_ascii_whitespace().count();
+        num_chars += buf.chars().count();
+        buf.clear();
     }
 
     Ok(FileInfo {
