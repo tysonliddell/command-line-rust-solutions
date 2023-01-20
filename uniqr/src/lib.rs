@@ -92,6 +92,7 @@ pub fn run(config: Config) -> MyResult<()> {
             };
 
             outfile.write(format!("{}{}", prefix, prev_line).as_bytes())?;
+            outfile.flush()?;
             count = 1;
         } else {
             count += 1;
@@ -101,7 +102,5 @@ pub fn run(config: Config) -> MyResult<()> {
             break;
         }
     }
-
-    outfile.flush()?;
     Ok(())
 }
