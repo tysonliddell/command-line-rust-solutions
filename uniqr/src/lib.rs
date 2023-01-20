@@ -91,7 +91,7 @@ pub fn run(config: Config) -> MyResult<()> {
                 String::from("")
             };
 
-            outfile.write(format!("{}{}", prefix, prev_line).as_bytes())?;
+            write!(outfile, "{}{}", prefix, prev_line)?;
             outfile.flush()?;
             count = 1;
         } else {
