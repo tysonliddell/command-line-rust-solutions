@@ -68,16 +68,18 @@ pub fn run(config: Config) -> MyResult<()> {
     let mut prev_line = String::new();
     let mut curr_line = String::new();
 
-    file.read_line(&mut prev_line)?;
-    let mut count: usize = 0;
+    file.read_line(&mut curr_line)?;
 
-    if prev_line.len() == 0 {
+    if curr_line.len() == 0 {
         // empty input
         return Ok(());
     }
 
+    let mut count: usize = 1;
     loop {
-        count += 1;
+        prev_line = curr_line.clone();
+        curr_line.clear();
+
         let bytes = file.read_line(&mut curr_line)?;
         if !curr_line.ends_with('\n') && prev_line[..prev_line.len() - 1] == curr_line {
             curr_line.push('\n');
@@ -86,21 +88,18 @@ pub fn run(config: Config) -> MyResult<()> {
             let prefix = if config.count {
                 format!("{:>4} ", count)
             } else {
-                "".to_string()
+                String::from("")
             };
 
             outfile.write(format!("{}{}", prefix, prev_line).as_bytes())?;
-            prev_line = curr_line.clone();
-            count = 0;
+            count = 1;
+        } else {
+            count += 1;
         }
 
         if bytes == 0 {
             break;
         }
-
-        // print!("{}", buf);
-        // prev_line = curr_line.clone();
-        curr_line.clear();
     }
 
     outfile.flush()?;
