@@ -75,36 +75,37 @@ pub fn get_args() -> MyResult<Config> {
     })
 }
 
-fn get_entry_type(entry: &DirEntry) -> EntryType {
-    if entry.file_type().is_dir() {
-        return Dir;
-    } else if entry.file_type().is_file() {
-        return File;
-    } else if entry.file_type().is_symlink() {
-        return Link;
-    } else {
-        unreachable!("File type error");
-    }
-}
-
 pub fn run(config: Config) -> MyResult<()> {
-    for path in config.paths {
-        for entry in WalkDir::new(path) {
-            match entry {
-                Err(e) => eprintln!("{}", e),
-                Ok(entry) => {
-                    if !config.entry_types.contains(&get_entry_type(&entry)) {
-                        continue;
-                    }
+    let type_filter = |entry: &DirEntry| {
+        config.entry_types.is_empty()
+            || config.entry_types.iter().any(|e| match e {
+                File => entry.file_type().is_file(),
+                Dir => entry.file_type().is_dir(),
+                Link => entry.file_type().is_symlink(),
+            })
+    };
 
-                    let filename = entry.file_name().to_str().ok_or("error reading filename")?;
-                    if config.names.is_empty() || config.names.iter().any(|r| r.is_match(filename))
-                    {
-                        println!("{}", entry.path().display())
-                    }
+    let name_filter = |entry: &DirEntry| {
+        config.names.is_empty()
+            || config
+                .names
+                .iter()
+                .any(|re| re.is_match(&entry.file_name().to_string_lossy()))
+    };
+
+    for path in config.paths {
+        WalkDir::new(path)
+            .into_iter()
+            .filter_map(|e| match e {
+                Err(e) => {
+                    eprintln!("{}", e);
+                    None
                 }
-            }
-        }
+                Ok(e) => Some(e),
+            })
+            .filter(type_filter)
+            .filter(name_filter)
+            .for_each(|e| println!("{}", e.path().display()));
     }
     Ok(())
 }
