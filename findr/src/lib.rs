@@ -17,6 +17,7 @@ pub struct Config {
     paths: Vec<String>,
     names: Vec<Regex>,
     entry_types: Vec<EntryType>,
+    max_depth: Option<usize>,
 }
 
 pub fn get_args() -> MyResult<Config> {
@@ -50,6 +51,13 @@ pub fn get_args() -> MyResult<Config> {
                 .default_value(".")
                 .help("Search paths"),
         )
+        .arg(
+            Arg::with_name("max_depth")
+                .long("maxdepth")
+                .value_name("MAX_DEPTH")
+                .required(false)
+                .help("Maximum search depth")
+        )
         .get_matches();
 
     Ok(Config {
@@ -72,6 +80,7 @@ pub fn get_args() -> MyResult<Config> {
                     .collect()
             })
             .unwrap_or(vec![File, Dir, Link]),
+        max_depth: matches.value_of("max_depth").map(|v| v.parse()).transpose()?,
     })
 }
 
@@ -93,6 +102,10 @@ pub fn run(config: Config) -> MyResult<()> {
                 .any(|re| re.is_match(&entry.file_name().to_string_lossy()))
     };
 
+    let max_depth_filter = |entry: &DirEntry| {
+        config.max_depth.is_none() || entry.depth() <= config.max_depth.unwrap()
+    };
+
     for path in config.paths {
         WalkDir::new(path)
             .into_iter()
@@ -105,6 +118,7 @@ pub fn run(config: Config) -> MyResult<()> {
             })
             .filter(type_filter)
             .filter(name_filter)
+            .filter(max_depth_filter)
             .for_each(|e| println!("{}", e.path().display()));
     }
     Ok(())
