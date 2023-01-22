@@ -1,4 +1,4 @@
-use clap::{App, Arg};
+use clap::{App, Arg, ArgGroup};
 
 use crate::Extract::*;
 use std::ops::Range;
@@ -21,7 +21,7 @@ pub struct Config {
 }
 
 fn parse_positive_int(val: &str) -> MyResult<usize> {
-    if val.contains("+") {
+    if val.contains('+') {
         return Err(From::from("cannot parse string with +"));
     }
 
@@ -81,7 +81,6 @@ pub fn get_args() -> MyResult<Config> {
                 .short("c")
                 .long("characters")
                 .takes_value(true)
-                .conflicts_with_all(&["bytes", "fields"])
                 .help("Selected characters"),
         )
         .arg(
@@ -90,7 +89,6 @@ pub fn get_args() -> MyResult<Config> {
                 .short("f")
                 .long("fields")
                 .takes_value(true)
-                .conflicts_with_all(&["bytes", "chars"])
                 .help("Selected fields"),
         )
         .arg(
@@ -103,6 +101,12 @@ pub fn get_args() -> MyResult<Config> {
                 .hide_default_value(true)
                 .help("use DELIM instead of TAB for field delimiter"),
         )
+        .group(
+            ArgGroup::with_name("list")
+                .args(&["bytes", "chars", "fields"])
+                .required(true)
+                .multiple(false),
+        )
         .get_matches();
 
     let mut iter = matches.value_of("delim").unwrap().bytes();
@@ -111,10 +115,19 @@ pub fn get_args() -> MyResult<Config> {
         return Err(From::from("Delimiter is larger than 1 byte"));
     }
 
+    let pos_list = parse_pos(matches.value_of("list").unwrap())?;
+    let extract = if matches.is_present("bytes") {
+        Bytes(pos_list)
+    } else if matches.is_present("chars") {
+        Chars(pos_list)
+    } else {
+        Fields(pos_list)
+    };
+
     Ok(Config {
         files: matches.values_of_lossy("files").unwrap(),
         delimiter,
-        extract: Fields(vec![]),
+        extract,
     })
 }
 
