@@ -55,7 +55,11 @@ fn dies(args: &[&str], expected: &str) -> TestResult {
 // --------------------------------------------------
 #[test]
 fn dies_not_enough_args() -> TestResult {
-    dies(&[CSV], "Must have --fields, --bytes, or --chars")
+    dies(
+        &[CSV],
+        "The following required arguments were not provided:
+    <--bytes <BYTES>|--characters <CHARS>|--fields <FIELDS>>",
+    )
 }
 
 // --------------------------------------------------

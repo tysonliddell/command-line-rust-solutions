@@ -69,7 +69,7 @@ pub fn get_args() -> MyResult<Config> {
         )
         .arg(
             Arg::with_name("bytes")
-                .value_name("LIST")
+                .value_name("BYTES")
                 .short("b")
                 .long("bytes")
                 .help("Selected bytes")
@@ -77,7 +77,7 @@ pub fn get_args() -> MyResult<Config> {
         )
         .arg(
             Arg::with_name("chars")
-                .value_name("LIST")
+                .value_name("CHARS")
                 .short("c")
                 .long("characters")
                 .takes_value(true)
@@ -85,7 +85,7 @@ pub fn get_args() -> MyResult<Config> {
         )
         .arg(
             Arg::with_name("fields")
-                .value_name("LIST")
+                .value_name("FIELDS")
                 .short("f")
                 .long("fields")
                 .takes_value(true)
@@ -109,10 +109,12 @@ pub fn get_args() -> MyResult<Config> {
         )
         .get_matches();
 
-    let mut iter = matches.value_of("delim").unwrap().bytes();
-    let delimiter = iter.next().unwrap();
-    if iter.next().is_some() {
-        return Err(From::from("Delimiter is larger than 1 byte"));
+    let delimiter = matches.value_of("delim").unwrap();
+    if delimiter.len() != 1 {
+        return Err(From::from(format!(
+            "--delim \"{}\" must be a single byte",
+            delimiter
+        )));
     }
 
     let pos_list = parse_pos(matches.value_of("list").unwrap())?;
@@ -126,7 +128,7 @@ pub fn get_args() -> MyResult<Config> {
 
     Ok(Config {
         files: matches.values_of_lossy("files").unwrap(),
-        delimiter,
+        delimiter: *delimiter.as_bytes().first().unwrap(),
         extract,
     })
 }
