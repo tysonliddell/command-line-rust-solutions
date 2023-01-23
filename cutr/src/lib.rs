@@ -1,7 +1,7 @@
 use clap::{App, Arg, ArgGroup};
 
 use crate::Extract::*;
-use std::ops::Range;
+use std::{num::NonZeroUsize, ops::Range};
 
 type MyResult<T> = Result<T, Box<dyn std::error::Error>>;
 type PositionList = Vec<Range<usize>>;
@@ -20,15 +20,15 @@ pub struct Config {
     extract: Extract,
 }
 
-fn parse_positive_int(val: &str) -> MyResult<usize> {
-    if val.contains('+') {
-        return Err(From::from("cannot parse string with +"));
-    }
-
-    match val.parse() {
-        Ok(n) if n > 0 => Ok(n),
-        _ => Err(From::from(val)),
-    }
+fn parse_index(val: &str) -> MyResult<usize> {
+    let value_error = || From::from(format!("illegal index value: \"{}\"", val));
+    val.starts_with('+')
+        .then(|| Err(value_error()))
+        .unwrap_or_else(|| {
+            val.parse::<NonZeroUsize>()
+                .map(From::from)
+                .map_err(|_| value_error())
+        })
 }
 
 fn parse_pos(ranges: &str) -> MyResult<PositionList> {
@@ -37,7 +37,7 @@ fn parse_pos(ranges: &str) -> MyResult<PositionList> {
         .map(|range| {
             let mut range = range
                 .splitn(2, '-')
-                .map(parse_positive_int)
+                .map(parse_index)
                 .collect::<Result<Vec<usize>, _>>()
                 .map_err(|_| format!("illegal list value: \"{}\"", range))?;
 
