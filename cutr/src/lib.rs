@@ -1,7 +1,13 @@
-use clap::{App, Arg, ArgGroup};
-
 use crate::Extract::*;
-use std::{num::NonZeroUsize, ops::Range};
+use clap::{App, Arg, ArgGroup};
+use csv::{ReaderBuilder, StringRecord, WriterBuilder};
+use std::{
+    cmp::min,
+    fs::File,
+    io::{self, BufRead, BufReader},
+    num::NonZeroUsize,
+    ops::Range,
+};
 
 type MyResult<T> = Result<T, Box<dyn std::error::Error>>;
 type PositionList = Vec<Range<usize>>;
@@ -133,14 +139,83 @@ pub fn get_args() -> MyResult<Config> {
     })
 }
 
+fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
+    match filename {
+        "-" => Ok(Box::new(BufReader::new(io::stdin()))),
+        _ => Ok(Box::new(BufReader::new(File::open(filename)?))),
+    }
+}
+
+fn extract_chars(line: &str, char_pos: &[Range<usize>]) -> String {
+    let char_vec: Vec<_> = line.chars().collect();
+    char_pos
+        .iter()
+        .filter(|r| r.start < char_vec.len())
+        .flat_map(|r| &char_vec[r.start..min(r.end, char_vec.len())])
+        .collect()
+}
+
+fn extract_bytes(line: &str, byte_pos: &[Range<usize>]) -> String {
+    let bytes = line.as_bytes();
+    let bytes: Vec<u8> = byte_pos
+        .iter()
+        .filter(|r| r.start < bytes.len())
+        .flat_map(|r| &bytes[r.start..min(r.end, bytes.len())])
+        .copied()
+        .collect();
+    String::from_utf8_lossy(&bytes).to_string()
+}
+
+fn extract_fields(record: &StringRecord, field_pos: &[Range<usize>]) -> Vec<String> {
+    let valid_record_range = |r: &Range<usize>| r.start..min(r.end, record.len());
+    field_pos
+        .iter()
+        .filter(|r| r.start < record.len())
+        .flat_map(valid_record_range)
+        .map(|i| String::from(&record[i]))
+        .collect()
+}
+
 pub fn run(config: Config) -> MyResult<()> {
-    println!("{:?}", config);
+    for filename in config.files {
+        match open(&filename) {
+            Err(e) => eprintln!("{}: {}", filename, e),
+            Ok(file) => match &config.extract {
+                Bytes(pos_list) => {
+                    for line in file.lines() {
+                        println!("{}", extract_bytes(&line?, pos_list));
+                    }
+                }
+                Chars(pos_list) => {
+                    for line in file.lines() {
+                        println!("{}", extract_chars(&line?, pos_list));
+                    }
+                }
+                Fields(pos_list) => {
+                    let mut reader = ReaderBuilder::new()
+                        .delimiter(config.delimiter)
+                        .has_headers(false)
+                        .from_reader(file);
+                    let mut writer = WriterBuilder::new()
+                        .delimiter(config.delimiter)
+                        .has_headers(false)
+                        .from_writer(io::stdout());
+                    for record in reader.records() {
+                        let fields = extract_fields(&record?, pos_list);
+                        writer.write_record(&fields)?;
+                        writer.flush()?;
+                    }
+                }
+            },
+        }
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod unit_tests {
-    use super::parse_pos;
+    use super::{extract_bytes, extract_chars, extract_fields, parse_pos};
+    use csv::StringRecord;
 
     #[test]
     fn test_parse_pos() {
@@ -241,5 +316,35 @@ mod unit_tests {
         let res = parse_pos("15,19-20");
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), vec![14..15, 18..20]);
+    }
+
+    #[test]
+    fn test_extract_chars() {
+        assert_eq!(extract_chars("", &[0..1]), "".to_string());
+        assert_eq!(extract_chars("ábc", &[0..1]), "á".to_string());
+        assert_eq!(extract_chars("ábc", &[0..1, 2..3]), "ác".to_string());
+        assert_eq!(extract_chars("ábc", &[0..3]), "ábc".to_string());
+        assert_eq!(extract_chars("ábc", &[2..3, 1..2]), "cb".to_string());
+        assert_eq!(extract_chars("ábc", &[0..1, 1..2, 4..5]), "áb".to_string());
+    }
+
+    #[test]
+    fn test_extract_bytes() {
+        assert_eq!(extract_bytes("ábc", &[0..1]), "�".to_string());
+        assert_eq!(extract_bytes("ábc", &[0..2]), "á".to_string());
+        assert_eq!(extract_bytes("ábc", &[0..3]), "áb".to_string());
+        assert_eq!(extract_bytes("ábc", &[0..4]), "ábc".to_string());
+        assert_eq!(extract_bytes("ábc", &[3..4, 2..3]), "cb".to_string());
+        assert_eq!(extract_bytes("ábc", &[0..2, 5..6]), "á".to_string());
+    }
+
+    #[test]
+    fn test_extract_fields() {
+        let rec = StringRecord::from(vec!["Captain", "Sham", "12345"]);
+        assert_eq!(extract_fields(&rec, &[0..1]), &["Captain"]);
+        assert_eq!(extract_fields(&rec, &[1..2]), &["Sham"]);
+        assert_eq!(extract_fields(&rec, &[0..1, 2..3]), &["Captain", "12345"]);
+        assert_eq!(extract_fields(&rec, &[0..1, 3..4]), &["Captain"]);
+        assert_eq!(extract_fields(&rec, &[1..2, 0..1]), &["Sham", "Captain"]);
     }
 }
