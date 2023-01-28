@@ -85,35 +85,31 @@ pub fn get_args() -> MyResult<Config> {
 fn find_files(paths: &[String], recursive: bool) -> Vec<MyResult<String>> {
     let mut results = vec![];
     for path in paths {
-        if path == "-" {
-            results.push(Ok(String::from(path)));
-            continue;
-        }
-
-        let mut files = WalkDir::new(path).into_iter().peekable();
-        let root = files.peek().unwrap();
-
-        if !recursive && root.as_ref().map(|e| e.path().is_dir()).unwrap_or(false) {
-            results.push(Err(From::from(format!("{} is a directory", path))));
-        } else {
-            results.extend(
-                files
-                    .filter(|res| res.is_err() || !res.as_ref().unwrap().path().is_dir())
-                    .map(|r| {
-                        r.map_err(|e| {
-                            From::from(format!(
-                                "{}: {}",
-                                e.path()
-                                    .map(|p| p.display().to_string())
-                                    .unwrap_or("error".to_string()),
-                                e.io_error()
-                                    .map(|e| e.to_string())
-                                    .unwrap_or("unknown error".to_string())
-                            ))
-                        })
-                        .map(|entry| entry.path().display().to_string())
-                    }),
-            );
+        match path.as_str() {
+            "-" => results.push(Ok(String::from(path))),
+            _ => match std::fs::metadata(path) {
+                Ok(metadata) => {
+                    if !recursive && metadata.is_dir() {
+                        results.push(Err(From::from(format!("{} is a directory", path))));
+                    } else if recursive {
+                        results.extend(
+                            WalkDir::new(path)
+                                .into_iter()
+                                // flatten() also skips None for Options and Err for Results!
+                                // This is because Option and Result can both be turned into
+                                // iterators. See docs.
+                                .flatten()
+                                .filter(|entry| entry.path().is_file())
+                                .map(|entry| Ok(entry.path().display().to_string())),
+                        )
+                    } else {
+                        results.push(Ok(path.to_string()));
+                    }
+                }
+                Err(e) => {
+                    results.push(Err(From::from(format!("{}: {}", path, e))));
+                }
+            },
         }
     }
     results
@@ -132,18 +128,18 @@ fn find_lines<T: BufRead>(
     invert_match: bool,
 ) -> MyResult<Vec<String>> {
     let mut results = vec![];
+    let mut buf = String::new();
     loop {
-        let mut buf = String::new();
         file.read_line(&mut buf)?;
         if buf.len() == 0 {
             break;
         }
 
-        match pattern.is_match(&buf) {
-            true if !invert_match => results.push(buf),
-            false if invert_match => results.push(buf),
-            _ => (),
+        if pattern.is_match(&buf) ^ invert_match {
+            results.push(std::mem::take(&mut buf));
         }
+
+        buf.clear();
     }
     Ok(results)
 }
@@ -161,13 +157,17 @@ pub fn run(config: Config) -> MyResult<()> {
                     } else {
                         "".to_string()
                     };
-                    let matches = find_lines(file, &config.pattern, config.invert_match)?;
-                    if config.count {
-                        println!("{}{}", prefix, matches.len());
-                    } else {
-                        for m in matches {
-                            print!("{}{}", prefix, m);
+                    match find_lines(file, &config.pattern, config.invert_match) {
+                        Ok(matches) => {
+                            if config.count {
+                                println!("{}{}", prefix, matches.len());
+                            } else {
+                                for line in matches {
+                                    print!("{}{}", prefix, line);
+                                }
+                            }
                         }
+                        Err(e) => eprintln!("{}: {}", filename, e),
                     }
                 }
             },
