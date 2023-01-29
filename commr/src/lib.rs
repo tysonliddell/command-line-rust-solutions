@@ -96,29 +96,21 @@ enum Line {
 }
 
 fn get_next_line(
-    file1_lines: &mut Peekable<Lines<Box<dyn BufRead>>>,
-    file2_lines: &mut Peekable<Lines<Box<dyn BufRead>>>,
+    file1_lines: &mut Peekable<impl Iterator<Item=String>>,
+    file2_lines: &mut Peekable<impl Iterator<Item=String>>,
     insensitive: bool,
-) -> MyResult<Option<Line>> {
-    let line1 = file1_lines
-        .peek()
-        .map(|v| v.as_ref().map_err(|e| e.to_string()))
-        .transpose()?
-        .cloned();
-    let line2 = file2_lines
-        .peek()
-        .map(|v| v.as_ref().map_err(|e| e.to_string()))
-        .transpose()?
-        .cloned();
+) -> Option<Line> {
+    let line1 = file1_lines.peek().cloned();
+    let line2 = file2_lines.peek().cloned();
 
     if line1.is_none() && line2.is_none() {
-        return Ok(None);
+        return None;
     } else if line1.is_none() {
         file2_lines.next();
-        return Ok(Some(File2(line2.unwrap())));
+        return Some(File2(line2.unwrap()));
     } else if line2.is_none() {
         file1_lines.next();
-        return Ok(Some(File1(line1.unwrap())));
+        return Some(File1(line1.unwrap()));
     }
 
     let line1 = line1.unwrap();
@@ -129,7 +121,7 @@ fn get_next_line(
     } else {
         line1.cmp(&line2)
     };
-    Ok(match res {
+    match res {
         Ordering::Equal => {
             file1_lines.next();
             file2_lines.next();
@@ -143,7 +135,7 @@ fn get_next_line(
             file2_lines.next();
             Some(File2(line2))
         }
-    })
+    }
 }
 
 pub fn run(config: Config) -> MyResult<()> {
@@ -160,11 +152,11 @@ pub fn run(config: Config) -> MyResult<()> {
         _ => "".to_string(),
     };
 
-    let mut file1_lines = open(file1)?.lines().peekable();
-    let mut file2_lines = open(file2)?.lines().peekable();
+    let mut file1_lines = open(file1)?.lines().filter_map(Result::ok).peekable();
+    let mut file2_lines = open(file2)?.lines().filter_map(Result::ok).peekable();
 
     loop {
-        let line = get_next_line(&mut file1_lines, &mut file2_lines, config.insensitive)?;
+        let line = get_next_line(&mut file1_lines, &mut file2_lines, config.insensitive);
         if line.is_none() {
             break;
         }
