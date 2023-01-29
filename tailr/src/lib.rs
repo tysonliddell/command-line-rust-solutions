@@ -170,9 +170,10 @@ pub fn run(config: Config) -> MyResult<()> {
                     printed_header = true;
                 }
                 let file = BufReader::new(file);
-                match config.bytes {
-                    Some(num_bytes) => print_bytes(file, num_bytes, total_bytes)?,
-                    _ => print_lines(file, config.lines, total_lines)?,
+                if let Some(num_bytes) = config.bytes {
+                    print_bytes(file, num_bytes, total_bytes)?;
+                } else {
+                    print_lines(file, config.lines, total_lines)?;
                 }
             }
         }
