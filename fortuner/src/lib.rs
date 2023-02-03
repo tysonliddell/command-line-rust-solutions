@@ -87,19 +87,16 @@ pub fn get_args() -> MyResult<Config> {
 fn find_files(paths: &[String]) -> MyResult<Vec<PathBuf>> {
     let mut result = vec![];
     for filename in paths {
-        if let Err(e) = metadata(filename) {
-            return Err(From::from(format!("{}: {}", filename, e)));
-        }
-        let path = PathBuf::from(filename);
-        if path.is_dir() {
-            let child_paths = WalkDir::new(filename)
-                .into_iter()
-                .filter_map(Result::ok)
-                .filter(|v| v.file_type().is_file())
-                .map(|child| child.into_path());
-            result.extend(child_paths);
-        } else {
-            result.push(path);
+        match metadata(filename) {
+            Err(e) => return Err(From::from(format!("{}: {}", filename, e))),
+            Ok(_) => {
+                let child_paths = WalkDir::new(filename)
+                    .into_iter()
+                    .filter_map(Result::ok)
+                    .filter(|v| v.file_type().is_file())
+                    .map(|child| child.into_path());
+                result.extend(child_paths);
+            }
         }
     }
 
@@ -131,7 +128,7 @@ fn read_next_fortune(file: &mut impl BufRead) -> MyResult<Option<String>> {
 }
 
 fn read_fortunes(paths: &[PathBuf]) -> MyResult<Vec<Fortune>> {
-    let mut fortunes: Vec<Fortune> = vec![];
+    let mut fortunes = vec![];
     for path in paths {
         let mut file = BufReader::new(File::open(path)?);
         loop {
