@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use ansi_term::Style;
-use chrono::{Datelike, Days, Local, Months, NaiveDate, Weekday};
+use chrono::{Datelike, Local, Months, NaiveDate, Weekday};
 use clap::{App, Arg};
 use itertools::{izip, Itertools};
 
@@ -107,7 +107,7 @@ pub fn get_args() -> MyResult<Config> {
 
 fn last_day_in_month(year: i32, month: u32) -> NaiveDate {
     let date = NaiveDate::from_ymd_opt(year, month, 1).unwrap();
-    date + Months::new(1) - Days::new(1)
+    (date + Months::new(1)).pred_opt().unwrap()
 }
 
 fn format_month(year: i32, month: u32, print_year: bool, today: NaiveDate) -> Vec<String> {
